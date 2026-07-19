@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Product** | SkillQuest — AI-Powered Gamified Skill Learning Platform |
-| **Version** | 1.0 |
+| **Version** | 1.1 — review corrections: risk-model framing, placement coverage wording, real goal personalization, measured timing targets |
 | **Team** | Nandan S (1SP23AD016), Anjith K.J (1SP23AD032), Bhanushree C.V (1SP23AD005) |
 | **Institution** | S.E.A College of Engineering & Technology, Bangalore — Dept. of AI & DS, VTU |
 | **Timeline** | Single semester (~14 working weeks) |
@@ -132,13 +132,19 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 | Judge0 free-tier rate limits during demo | Demo failure | Self-host Judge0 fallback; cache results for identical submissions |
 | Scope creep (adding cut features back) | Nothing finishes | Any scope change requires editing §3 of this doc + all 3 members agreeing |
 | Free-tier cold starts (Render) slow demos | Bad first impression | Ping/warm-up script before demos; document as infra limitation |
-| Dropout model looks "disconnected" from platform to examiners | Viva risk | Live demo shows the events log → weekly features → model score pipeline on a real user |
+| Risk model looks "disconnected" from platform to examiners | Viva risk | Live demo shows the events log → weekly features → model score pipeline on a real user |
+| Overclaiming results (accuracy, hiring readiness, intervention effect) | Fails the viva | Stated protocol (TRD §6.3), baselines reported alongside, explicit limitations section, banned phrasings listed in this doc |
+| Judge0 free tier cannot support even one pilot | No user testing | Self-host and load-test by week 6, not week 10 |
+| Single-owner bottleneck on backend + ML | Project stalls if one person is unavailable | Placement module owned end-to-end by a second member; shared AI-service knowledge |
 
 ## 9. Release Plan (single semester)
 
-- **Weeks 1–2** — Docs (this flow), repo setup, OULAD baseline notebook, content authoring begins.
-- **Weeks 3–6** — Auth + onboarding + skill graph + roadmap; game engine with Judge0; first 15 levels live.
-- **Weeks 7–9** — Gamification + events log; dropout model integrated; placement scorer.
-- **Weeks 10–11** — Leaderboard (P1), polish, seed 40+ levels, internal bug bash.
-- **Weeks 12–13** — User testing with real students; fix findings; collect metrics.
+- **Weeks 1–2** — Repo setup, OULAD baselines + first RF under the §6.3 protocol, skill graph, content authoring begins, ethics-approval question answered.
+- **Weeks 3–4** — Consent + auth + onboarding + roadmap; **pilot #1 (5 students)**.
+- **Weeks 5–6** — Game engine on **self-hosted, load-tested Judge0**; atomic XP; **pilot #2**; 18 levels.
+- **Weeks 7–9** — Gamification + events log; risk scoring live; placement coverage; **pilot #3**.
+- **Weeks 10–11** — Leaderboard (P1), polish, accessibility pass, 40+ levels, bug bash.
+- **Weeks 12–13** — UAT with 20–30 students; fix findings; collect metrics; write results + limitations.
 - **Week 14** — Freeze, final report/demo prep.
+
+Full detail in [06-IMPLEMENTATION-PLAN.md](06-IMPLEMENTATION-PLAN.md).

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.0 |
+| **Version** | 1.1 — review corrections: onboarding_step routing, gateway rule, quiz test-out, gap classification, nudge logging |
 | **Depends on** | [01-PRD.md](01-PRD.md) (features), [02-TRD.md](02-TRD.md) (architecture) |
 | **Purpose** | Every screen, every journey, every state — the blueprint the UI/UX design doc turns into mockups |
 
@@ -93,7 +93,7 @@ flowchart TD
 1. Weekly job computes features → AI service scores → tier stored on user doc.
 2. Tier transitions to **At Risk** → next dashboard visit renders a nudge card *instead of* the standard next-quest card: warm message ("Your streak misses you 🔥") + a **confidence booster** — an easier level from an already-passed concept, worth full XP.
 3. If the student doesn't log in at all for 5+ days: email nudge (P1) — max 1 email/week, never guilt-based wording.
-4. Nudge card interaction (or dismissal) → `event` — this measures whether interventions actually work, which is a headline chart for the final report.
+4. Every nudge writes a `nudges` row: `shown_at`, `clicked_at`, `dismissed_at`, plus the `dropout_score_id` that triggered it. **Because we make this claim, we must log the evidence** — and with n≈30 and no control group, the report may state *interaction rates* (shown/clicked/dismissed and what the student did next) but **not** that the intervention reduced dropout.
 
 ## 6. Flow E — Streak Mechanics (background)
 
