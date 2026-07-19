@@ -74,7 +74,7 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 - Code execution via **Judge0** (hosted API or self-hosted) — never executed on our own backend.
 - Per-level: pass/fail per test case, XP award on full pass, hint system (hint costs a small XP amount — gamified help).
 - **Content commitment: 40–50 levels** across the Java + DSA track (this is a team-wide authoring task, not just engineering).
-- **Acceptance:** a student can complete a level end-to-end — read problem, write code, run tests, earn XP — in under one round trip of 3 seconds per run.
+- **Acceptance:** a student can complete a level end-to-end — read problem, write code, run tests, earn XP. Timing requirement: **UI acknowledges the run in < 200 ms**; **p95 end-to-end test execution < 15 s** (JVM startup per test case makes anything faster infeasible — see TRD §5). Actual p95 is measured during UAT and reported.
 
 ### F4 — Gamification Layer (P0)
 - **XP** for level completion and daily activity; **levels/ranks** derived from XP.
@@ -105,7 +105,7 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 - 40+ levels playable; full user journey (signup → roadmap → 5 levels → score update) demo-able without errors.
 - Dropout model: report metrics on OULAD test split with methodology (no invented numbers — whatever we get is what we report).
 - User acceptance test with **20–30 real students** from college: engagement rating, System Usability Scale (SUS) questionnaire, would-recommend %.
-- API latency: p95 < 500 ms for platform APIs (Judge0 execution time excluded, reported separately).
+- API latency: p95 < 500 ms for platform APIs; code execution reported separately (p95 < 15 s, measured).
 
 ## 7. Constraints & Assumptions
 

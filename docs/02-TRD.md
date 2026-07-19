@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.1 — switched MongoDB Atlas + Firebase Auth → Supabase (Postgres + Auth) |
+| **Version** | 1.2 — review corrections: Node 22, DB credential model, Judge0 timing/scheduling, ML protocol, real goal personalization |
 | **Depends on** | [01-PRD.md](01-PRD.md) — feature scope is defined there; this doc defines *how* it's built |
 | **Audience** | The dev team. Every technology decision and integration contract lives here. |
 
@@ -38,11 +38,11 @@ flowchart TD
 | Frontend | React 18 + Vite + Tailwind CSS | Vite, not CRA (CRA is deprecated) |
 | Editor | `@monaco-editor/react` | Java syntax highlighting built in |
 | State/data | React Query + Context | No Redux — overkill at this size |
-| Web API | Node 20 LTS + Express 4 | |
+| Web API | Node 22 LTS + Express 4 | Node 20 reached end-of-life in April 2026 — do not use it |
 | AI Service | Python 3.11 + FastAPI + Uvicorn | |
 | DB | Supabase free tier — Postgres (500 MB) | Relational schema; SQL aggregations power dropout features and the leaderboard; pgvector available for embeddings |
 | Auth | Supabase Auth | Email/password + Google. Web API verifies the Supabase JWT — no Firebase anywhere |
-| DB access | Prisma (Web API) · psycopg + pandas (AI service) | Always via Supabase's pooled connection string (Supavisor, port 6543) — the free tier allows very few direct connections |
+| DB access | Prisma (Web API) · psycopg + pandas (AI service) | Both connect over **standard PostgreSQL credentials** (a connection string with a DB role + password), *not* the Supabase service-role API key — that key is for Supabase's REST/JS client, which we don't use server-side. Always via the pooled connection string (Supavisor, port 6543); the free tier allows very few direct connections |
 | Code execution | Judge0 CE | Via RapidAPI free tier first; self-hosted on a VM/Render as fallback (see §5) |
 | Embeddings | `all-MiniLM-L6-v2` via **fastembed** (ONNX) | NOT full PyTorch `sentence-transformers` — Render free tier has 512 MB RAM; torch alone exceeds it. fastembed runs the same model in ~150 MB |
 | ML | scikit-learn (Random Forest), pandas | Trained offline in notebooks; model shipped as a `joblib` artifact inside the AI service image |
@@ -67,18 +67,32 @@ SKILLQUEST-DEV/
 1. Frontend signs in via `supabase-js` (email/password or Google) → receives a Supabase **access token** (JWT, ~1 h expiry, SDK auto-refreshes). Google sign-in needs a one-time Google Cloud OAuth client configured in the Supabase dashboard.
 2. Every Web API request carries `Authorization: Bearer <accessToken>`.
 3. Express middleware verifies the JWT with the project's `SUPABASE_JWT_SECRET` (HS256), reads the `sub` claim (the `auth.users` UUID), and looks up/creates the matching row in our `profiles` table (`profiles.id` = that UUID).
-4. **The browser uses Supabase for auth only.** The anon key grants no table access (RLS enabled with no public policies) — all data flows through the Web API, which connects to Postgres with server-side credentials.
-5. Web API → AI service calls carry `X-Internal-Key: <shared secret>` (env var on both services). The AI service rejects requests without it.
+4. **The browser uses Supabase for auth only.** The anon key grants no table access (RLS enabled with no public policies) — all data flows through the Web API, which connects to Postgres with its own least-privilege DB role (§4.1).
+5. Web API → AI service calls carry `X-Internal-Key: <shared secret>` (env var on both services). The AI service rejects requests without it. **The browser never calls `/ai/*` directly** — every AI call is server-to-server behind the Web API gateway.
 6. Admin routes (risk dashboard, level seeding) gated by an `is_admin` flag on the profile row — set manually in the Supabase dashboard for the 3 team members.
+
+### 4.1 Post-onboarding routing
+
+Route on **`profiles.onboarding_step`**, not on whether a profile row exists — step 3 creates the profile automatically on first login, so "profile exists?" is always true by the time the frontend asks. Rule: `onboarding_step < 5` → `/onboarding` (resume at that step); `== 5` → the requested route.
+
+### 4.2 Database roles (least privilege)
+
+Two Postgres roles, created in the initial migration:
+
+| Role | Grants | Used by |
+|---|---|---|
+| `skillquest_api` | `SELECT/INSERT/UPDATE` on application tables; no `DROP`/`ALTER` | Web API (Prisma runtime) |
+| `skillquest_ai` | `SELECT` on `events`, `user_levels`, `submissions`, `profiles`, `skills`; `INSERT` on `dropout_scores`, `placement_scores` | AI service |
+
+Migrations run under a separate owner role, not the runtime roles. This is cheap to set up and means a leaked service credential can't drop tables.
 
 ## 5. Judge0 Integration (code execution)
 
-- **Language**: Java — Judge0 CE `language_id: 62` (OpenJDK). Submission must contain a `public class Main` with `main()`; the level's starter code always provides this scaffold so students only fill in methods.
-- **Flow**: Web API `POST /submissions?base64_encoded=true&wait=true` with `source_code`, `stdin`, `expected_output` per test case → synchronous result. If `wait=true` is unavailable/slow, fall back to token polling every 500 ms (max 10 s).
-- Test cases run as **separate Judge0 submissions** (batch endpoint) so we can report per-case pass/fail.
+- **Language**: Java (OpenJDK). **Query `GET /languages` at startup and resolve the Java id at runtime** — `language_id: 62` is correct for common Judge0 CE builds but varies by provider and version; never hardcode it. Cache the resolved id. Submission must contain a `public class Main` with `main()`; the level's starter code always provides this scaffold so students only fill in methods.
+- **Flow**: Web API `POST /submissions/batch?base64_encoded=true` with one submission per test case (`source_code`, `stdin`, `expected_output`) → poll tokens every 500 ms until all complete (cap 20 s, then surface a timeout). Batch keeps per-case pass/fail while paying JVM startup once per case in parallel rather than serially.
 - **Resource limits per run**: CPU time 5 s, wall 10 s, memory 256 MB (JVM needs headroom; Python-style 128 MB limits will fail Java).
-- **Latency expectation**: JVM startup makes Java runs ~1.5–3 s. UI must show a "Running tests…" state; PRD's 3 s round-trip target applies to *platform* APIs, Judge0 time is shown to the user as execution time.
-- **Rate limits**: RapidAPI free tier is ~50 requests/day — fine for dev, not for user testing or demos. **Before week 10, self-host Judge0 CE** (Docker, needs a small VM; Render doesn't support privileged containers — use a free Oracle Cloud VM or a college server). This is on the critical path in the implementation plan.
+- **Latency expectation (measured target, not aspiration)**: JVM startup is ~1.5–3 s *per case*; a level with 5 test cases realistically takes **5–12 s wall clock**. Requirement is therefore: **UI acknowledges the click in < 200 ms** (button → "Running tests…", editor locks) and **p95 end-to-end test run < 15 s**. Record actual p95 during UAT and report it. The old "3 s per run" target was infeasible and has been removed.
+- **Capacity**: RapidAPI free tier is ~50 requests/day — that is roughly **10 level attempts**, so it is a dev-only stopgap. **Self-host Judge0 CE and load-test it by week 6** (Docker + privileged containers, so a free Oracle Cloud VM or a college server — Render cannot host it). Load test = 5 concurrent users × 5 test cases, measure p95. Verify current free-tier limits for RapidAPI, Oracle Cloud, Render and Supabase before committing, as they change.
 - **Security**: our servers never execute user code. All submissions are sandboxed inside Judge0. The Web API additionally caps submission size (64 KB) and strips level test data from client responses (hidden test cases stay hidden).
 
 ## 6. AI Service — Module Contracts
@@ -110,7 +124,9 @@ All endpoints internal (called by Web API only), JSON in/out.
 
 ### 6.4 Placement Scorer — `POST /ai/placement-score`
 - In: student's completed skill IDs + target companies. Out: per-company `{score 0–100, missingSkills[]}`.
-- Method: each company profile is a curated list of weighted skills (from public JDs, stored in the `company_profiles` table; JD-phrase embeddings cached in a pgvector column so they're computed once, not per request). Score = weighted coverage of the profile by completed skills, with embedding similarity used to match skill names to JD phrasing (so "recursion" matches "recursive problem solving"). Gap list = highest-weight uncovered skills.
+- Method: each company profile is a curated list of weighted skills stored in `companies` + `company_skills` (schema §3.11). **Embeddings are used at ingestion time only** — when a team member maps a JD phrase ("recursive problem solving") to a canonical `skill_id` (`recursion`), embedding similarity suggests the match and a human confirms it. Once mapped, scoring is **pure weighted coverage arithmetic**: `score = 100 × Σ(weight of covered skills) / Σ(all weights)`. No runtime embedding calls.
+- This matters for the viva: the score is deterministic, reproducible, and explainable line by line ("you have 7 of the 11 weighted requirements"). Runtime similarity would add latency and non-determinism for no accuracy gain, since the mapping is already canonical.
+- Out: per-company `{score, coveredSkills[], missingSkills[]}` where each missing skill is tagged `available_now` (a roadmap node exists) or `external_track` (SkillQuest doesn't teach it yet).
 
 ## 7. Events Log (the backbone)
 
@@ -139,4 +155,4 @@ The free tier allows two projects per organization — exactly one for dev, one 
 
 1. Exact skill DAG contents for Java + DSA (~15–20 skill nodes covering syntax → OOP → collections → recursion → sorting/searching → stacks/queues → linked lists → trees basics → interview patterns).
 2. Judge0 self-host target (Oracle Cloud free VM vs college server) — decide by week 6.
-3. Whether weekly dropout scoring runs as Render cron or in-process `node-cron` (leaning in-process: zero extra infra).
+3. ~~Whether weekly dropout scoring runs as Render cron or in-process `node-cron`.~~ **Resolved: external scheduler.** `node-cron` cannot fire while a free Render service is asleep (which it will be, most of the time). A GitHub Actions scheduled workflow calls an authenticated `POST /internal/jobs/weekly-scoring` endpoint, which wakes the service. The job takes an advisory lock (`pg_try_advisory_lock`) and is idempotent per `(user_id, window_end)` so a retry or double-fire cannot double-score.
