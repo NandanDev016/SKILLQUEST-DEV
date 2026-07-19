@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.0 |
+| **Version** | 1.1 — review corrections: two-token violet palette (measured), target sizes, form errors, focus management, live regions |
 | **Depends on** | [03-APP-FLOW.md](03-APP-FLOW.md) (screens & journeys) |
 | **Purpose** | The design system + screen layouts the frontend is built from. Tailwind-first, so every token here maps to a class. |
 
@@ -28,8 +28,9 @@ Dark-first (coding audience expects it; Monaco is dark). Light theme is a P1 str
 | `border-subtle` | `#2E3342` | Dividers, card borders |
 | `text-primary` | `#F2F4F8` | Headings, body |
 | `text-muted` | `#9AA3B2` | Secondary text, labels |
-| `primary` (Quest Violet) | `#7C5CFC` | Primary buttons, active nav, focus rings |
-| `primary-hover` | `#6A4AF0` | Hover state |
+| **`primary-fg`** | `#9B85FF` | Violet **text/icons/links/focus rings** on dark surfaces |
+| **`primary-bg`** | `#6A4AF0` | Violet **filled button background** (always with `#F2F4F8` text) |
+| `primary-bg-hover` | `#5A3AE0` | Filled button hover |
 | `accent` (XP Gold) | `#FFC53D` | XP, coins, badges, streak flame |
 | `success` | `#3DD68C` | Passed tests, completed nodes |
 | `danger` | `#F2555A` | Failed tests, errors (used sparingly) |
@@ -38,7 +39,16 @@ Dark-first (coding audience expects it; Monaco is dark). Light theme is a P1 str
 | `risk-watch` | `#FFC53D` | Admin risk tier (Watch) |
 | `risk-healthy` | `#3DD68C` | Admin risk tier (Healthy) |
 
-**Usage discipline:** violet = "you can act on this", gold = "you earned this", green = "you succeeded", red = "something failed" (and only that — never decoration). Accessibility: all text pairs meet WCAG AA (≥4.5:1) on their background; `primary` on `bg-base` is used for large text/buttons only.
+**Why two violets.** A single violet cannot serve both jobs. The original `#7C5CFC` measures **4.31:1** on `bg-base` — below the 4.5:1 AA threshold for normal text. Simply lightening it to `#9B85FF` fixes text-on-dark (**6.47:1** ✓) but then light text *on* that violet is **2.65:1**, which fails badly. So:
+
+| Pairing | Ratio | Verdict |
+|---|---|---|
+| `primary-fg` `#9B85FF` on `bg-base` `#0F1117` | **6.47:1** | ✅ AA normal text |
+| `text-primary` `#F2F4F8` on `primary-bg` `#6A4AF0` | **4.95:1** | ✅ AA normal text |
+| ~~`#7C5CFC` on `#0F1117`~~ | 4.31:1 | ❌ do not use for text |
+| ~~`#F2F4F8` on `#9B85FF`~~ | 2.65:1 | ❌ never put light text on the light violet |
+
+**Usage discipline:** violet = "you can act on this", gold = "you earned this", green = "you succeeded", red = "something failed" (and only that — never decoration). Every new color pairing must be measured before it ships; do not assume a hue works in both directions.
 
 ## 3. Typography
 
@@ -57,7 +67,7 @@ Dark-first (coding audience expects it; Monaco is dark). Light theme is a P1 str
 
 | Component | Notes |
 |---|---|
-| `Button` | Variants: primary (violet), secondary (surface-2 + border), ghost, danger. Sizes sm/md/lg. Loading state = spinner + disabled. |
+| `Button` | Variants: primary (`primary-bg` + `text-primary`), secondary (surface-2 + border), ghost, danger. Sizes sm/md/lg, all ≥ 44×44 px hit area. Loading state = spinner + disabled + `aria-busy`. |
 | `Card` | `bg-surface`, `rounded-xl`, `border-subtle`, `p-6`. The workhorse. |
 | `XPBadge` | Gold pill with ⚡ icon + number; animates on increase (count-up). |
 | `StreakFlame` | 🔥 + day count; three states (lit / amber-pulse / grey) per App Flow §6. |
@@ -69,7 +79,13 @@ Dark-first (coding audience expects it; Monaco is dark). Light theme is a P1 str
 | `Toast` | Bottom-right; success/info/error. Auto-dismiss 4s. |
 | `EmptyState` | Illustration + one line + one CTA. Used per App Flow §8. |
 
-Component states are non-negotiable: every interactive component must define default / hover / focus-visible / active / disabled / loading. Focus-visible = 2px `primary` ring (keyboard accessibility).
+Component states are non-negotiable: every interactive component must define default / hover / focus-visible / active / disabled / loading. Focus-visible = 2px `primary-fg` ring with a 2px offset (keyboard accessibility).
+
+Add two more components implied by the corrected flows:
+| Component | Notes |
+|---|---|
+| `GapRow` | Placement gap item. Two modes: **available** (normal, "Train this →") and **external** (muted, "future track" tag, **no button**). |
+| `ConsentScreen` | Pre-onboarding research consent (Backend Schema §5.1): plain-language disclosure, explicit opt-in, link to full text. |
 
 ## 6. Layout System
 
@@ -86,7 +102,9 @@ Hero: headline "Level up from student to placement-ready" + subhead + primary CT
 Centered card on `bg-base`. Google button (primary path) + email/password. Toggle sign-up/login. Minimal — get them through fast.
 
 ### 7.3 Onboarding Wizard (S3)
-Full-screen, one question per step, progress bar at top (Step 2 of 5). Big friendly inputs. Each step animates in from the right. **Step 5 → "Building your quest…" loader** (App Flow §2): themed animation (skill nodes assembling), 2–4s. This screen sets the emotional tone — invest design polish here.
+Preceded by the **consent screen** (`ConsentScreen`) — plain-language, explicit opt-in, before any data is collected.
+
+Full-screen, one question per step, progress bar at top (Step 2 of 5). Big friendly inputs with **visible labels**, and **Back + Save & exit** on every step. Each step animates in from the right; progress persists server-side so a drop-off resumes where it left off. **Step 5 → "Building your quest…" loader** (App Flow §2): themed animation (skill nodes assembling), 2–4s. This screen sets the emotional tone — invest design polish here.
 
 ### 7.4 Dashboard (S4) — the home base
 ```
@@ -149,12 +167,34 @@ Function over form — plain table, risk tiers color-coded (`risk-*` tokens), so
 
 ## 9. Accessibility (bake in, don't retrofit)
 
-- WCAG AA contrast everywhere (§2 palette is pre-checked).
-- Every interactive element keyboard-reachable; visible `focus-visible` ring.
-- Monaco has built-in a11y; ensure the Run Tests flow is operable without a mouse.
-- `prefers-reduced-motion` honored for all celebrations.
-- Semantic HTML + ARIA labels on icon-only buttons (streak, XP, nav icons).
-- Don't encode meaning in color alone — pair with icons (✓/✗, 🔒) so red/green failures are distinguishable for colorblind users.
+**Color & contrast**
+- Every pairing measured, not assumed — see the §2 table. AA (4.5:1) for normal text, 3:1 for large text and UI boundaries.
+- Never encode meaning in color alone — pair with icons (✓/✗, 🔒) so pass/fail is distinguishable for colorblind users.
+
+**Touch & pointer targets**
+- Minimum **44×44 px** for every interactive target (WCAG 2.5.5). Applies especially to the mobile results drawer, roadmap nodes and bottom tab bar.
+- Minimum **8 px spacing** between adjacent targets — mis-taps in the play screen are the most damaging (a wrong tap can discard code).
+- Bottom tab bar respects `env(safe-area-inset-bottom)` so it clears the home indicator on notched phones.
+
+**Forms** (onboarding is the highest-stakes form in the app)
+- **Visible labels always** — never placeholder-only; placeholders vanish on focus and fail for screen readers.
+- Inline errors adjacent to the field, tied via `aria-describedby`, announced with `role="alert"`. Never color-only error state.
+- Every onboarding step needs **Back** and **Cancel/Save & exit** — a wizard with no way backwards traps users and inflates abandonment (which then pollutes our own engagement data).
+- Inputs typed correctly (`inputmode="numeric"` for hours) so mobile keyboards match.
+
+**Focus & announcements**
+- Visible focus ring on everything keyboard-reachable; never `outline: none` without a replacement.
+- **Route changes move focus** to the new page's `<h1>` and announce the page title — SPAs are silent on navigation otherwise.
+- **Modals trap focus** (badge popups, confirm dialogs), restore it to the trigger on close, and close on `Esc`.
+- **`aria-live="polite"`** on the test-results drawer and toasts, so a screen-reader user hears "3 of 5 tests passed" without hunting for it. XP counters use `aria-live="polite"` too; celebrations are `aria-hidden` decoration.
+- A **skip-to-content link** as the first focusable element on every page.
+- Monaco ships its own a11y support — verify the full Run Tests flow is completable with keyboard only.
+
+**Motion**
+- `prefers-reduced-motion` honored for all celebrations (confetti, XP count-up degrade to a static state change).
+
+**Icons**
+- **Lucide for all navigation and controls** (they carry accessible labels and scale predictably). Emoji (🔥⚡🏅) stay **decorative only**, marked `aria-hidden`, never the sole carrier of meaning — screen readers announce emoji inconsistently.
 
 ## 10. Assets & Deliverables (for the report + build)
 
