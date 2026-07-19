@@ -92,7 +92,27 @@ Migrations run under a separate owner role, not the runtime roles. This is cheap
 - **Flow**: Web API `POST /submissions/batch?base64_encoded=true` with one submission per test case (`source_code`, `stdin`, `expected_output`) → poll tokens every 500 ms until all complete (cap 20 s, then surface a timeout). Batch keeps per-case pass/fail while paying JVM startup once per case in parallel rather than serially.
 - **Resource limits per run**: CPU time 5 s, wall 10 s, memory 256 MB (JVM needs headroom; Python-style 128 MB limits will fail Java).
 - **Latency expectation (measured target, not aspiration)**: JVM startup is ~1.5–3 s *per case*; a level with 5 test cases realistically takes **5–12 s wall clock**. Requirement is therefore: **UI acknowledges the click in < 200 ms** (button → "Running tests…", editor locks) and **p95 end-to-end test run < 15 s**. Record actual p95 during UAT and report it. The old "3 s per run" target was infeasible and has been removed.
-- **Capacity**: RapidAPI free tier is ~50 requests/day — that is roughly **10 level attempts**, so it is a dev-only stopgap. **Self-host Judge0 CE and load-test it by week 6** (Docker + privileged containers, so a free Oracle Cloud VM or a college server — Render cannot host it). Load test = 5 concurrent users × 5 test cases, measure p95. Verify current free-tier limits for RapidAPI, Oracle Cloud, Render and Supabase before committing, as they change.
+### 5.1 Execution backends (build against the interface, not the vendor)
+
+All code execution goes through one internal contract — `ExecutionService.run(sourceCode, testCases[]) → result[]` — with three swappable implementations selected by env var:
+
+| Implementation | Used for | Notes |
+|---|---|---|
+| **Mock** | Frontend/backend development, CI | Returns canned pass/fail instantly. No Docker, no network, runs on any machine. **Most development happens here.** |
+| **RapidAPI Judge0** | Integration testing, verifying authored levels | Free tier ≈ 50 requests/day ≈ 10 level attempts. Manual testing only |
+| **Self-hosted Judge0 CE** | Pilots and demos | Needs privileged Docker on **x86 Linux/Windows** |
+
+This decoupling is what keeps execution off the critical path: the play screen can be built and tested end-to-end against the mock while the real backend is still being sorted out.
+
+### 5.2 Where self-hosted Judge0 runs
+
+Judge0 needs privileged containers (`isolate` requires cgroup access), so managed platforms — Render, Vercel, Railway, Fly — cannot host it. It needs a machine with root.
+
+- **Not an Apple Silicon Mac.** Judge0's official images are x86, so they emulate on ARM, and `isolate`'s cgroup requirements are awkward inside Docker Desktop's VM. Expect friction; don't put a milestone on it.
+- **Use a team member's x86 Windows/Linux laptop** (Docker + WSL2, or native Linux). Free, no emulation. Expose it with a **Cloudflare Tunnel** (free, no public IP or port forwarding needed) when a deployed backend has to reach it.
+- **Always-on hosting is deliberately deferred** to ~week 9, once the UAT format is decided. Scheduled, observed UAT sessions need only a laptop; free-roaming usage over two weeks would need an always-on host (college server, or a ~₹400/month VM). Do not buy infrastructure before knowing which.
+
+Load test before the first pilot that uses real execution: 5 concurrent users × 5 test cases, record p95. Verify current free-tier limits (RapidAPI, Render, Supabase) at that point, as they change.
 - **Security**: our servers never execute user code. All submissions are sandboxed inside Judge0. The Web API additionally caps submission size (64 KB) and strips level test data from client responses (hidden test cases stay hidden).
 
 ## 6. AI Service — Module Contracts
@@ -234,5 +254,5 @@ The free tier allows two projects per organization — exactly one for dev, one 
 ## 10. Open Technical Decisions (resolve during Backend Schema / Implementation Plan)
 
 1. Exact skill DAG contents for Java + DSA (~15–20 skill nodes covering syntax → OOP → collections → recursion → sorting/searching → stacks/queues → linked lists → trees basics → interview patterns).
-2. Judge0 self-host target (Oracle Cloud free VM vs college server) — decide by week 6.
+2. ~~Judge0 self-host target.~~ **Resolved: a team member's x86 laptop + Cloudflare Tunnel** for development and pilots (§5.2). Always-on hosting is a separate decision, deferred to ~week 9 pending the UAT format.
 3. ~~Whether weekly dropout scoring runs as Render cron or in-process `node-cron`.~~ **Resolved: external scheduler.** `node-cron` cannot fire while a free Render service is asleep (which it will be, most of the time). A GitHub Actions scheduled workflow calls an authenticated `POST /internal/jobs/weekly-scoring` endpoint, which wakes the service. The job takes an advisory lock (`pg_try_advisory_lock`) and is idempotent per `(user_id, window_end)` so a retry or double-fire cannot double-score.

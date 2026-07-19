@@ -27,7 +27,7 @@
 |---|---|---|---|
 | M0 | Foundations | End wk 2 | Repos scaffolded, Supabase up, OULAD **baselines + first RF** under the §6.3 protocol, 6 levels authored, ethics-approval question answered |
 | M1 | Auth + onboarding | End wk 4 | Consent → signup → onboarding → generated roadmap. **Pilot #1 (5 students)** on the onboarding flow |
-| M2 | **Playable vertical slice** | End wk 6 | User solves a real level via Judge0, earns XP atomically. **Self-hosted Judge0 load-tested.** **Pilot #2 (5 students)** on the play screen |
+| M2 | **Playable vertical slice** | End wk 6 | User solves a real level via Judge0, earns XP atomically. **Self-hosted Judge0 (x86 laptop) load-tested.** **Pilot #2 (5 students)** on the play screen |
 | M3 | Gamification + AI live | End wk 9 | XP/streaks/badges, risk scoring on real events, placement coverage + gap classification. **Pilot #3 (5 students)** |
 | M4 | Content complete + polish | End wk 11 | 40+ levels live, leaderboard, all edge/empty states, a11y pass, reconcile job run |
 | M5 | Tested + documented | End wk 13 | UAT with 20–30 students, metrics collected, report drafted |
@@ -64,6 +64,9 @@
 - First 6 levels with test cases (`content/levels/*.json`). Establish the level JSON format everyone follows.
 - **Ask the guide whether department/ethics approval is needed before student testing** (Backend Schema §5.1). Week 1, not week 12 — approval can take time and it gates every pilot.
 
+**Spike (whoever has an x86 machine, 1 hour)**
+- Confirm which team laptop is x86 (`uname -m` → `x86_64`, not `arm64`) and get **one Java submission through a local Judge0**. Everything downstream depends on this working, and the answer shapes weeks 5–6. Nandan's M5 Mac is ARM, so it is not the host.
+
 **Exit check (M0):** CI green on all three services; a seeded skill graph in dev; baselines + RF metrics recorded under the stated protocol; 6 levels authored; ethics question answered.
 
 ### Weeks 3–4 — Auth, Onboarding, Roadmap (→ M1)
@@ -83,8 +86,8 @@
 
 ### Weeks 5–6 — The Vertical Slice (→ M2, the critical milestone)
 **Nandan**
-- Judge0 integration: submission endpoint, runtime language-id resolution, per-test-case batch runs, verdict mapping, 64 KB cap, rate limiting.
-- **Self-host Judge0 and load-test it this milestone** (5 concurrent users × 5 test cases, record p95). The RapidAPI free tier is ~50 requests/day ≈ 10 level attempts — it cannot survive even a 5-student pilot, so this moves from week 10 to now.
+- `ExecutionService` interface + **mock implementation first** (TRD §5.1) so the play screen is never blocked on Judge0, then the real adapter: submission endpoint, runtime language-id resolution, per-test-case batch runs, verdict mapping, 64 KB cap, rate limiting.
+- **Stand up self-hosted Judge0 on an x86 team laptop + Cloudflare Tunnel, and load-test it** (5 concurrent × 5 test cases, record p95) before pilot #2. The RapidAPI free tier is ~10 level attempts/day and cannot survive a 5-student session.
 - `submissions` + `user_levels` write; **atomic XP award** (conditional transition + one transaction, Schema §3.7); level unlock logic.
 
 **Anjith**
@@ -138,13 +141,14 @@
 Supabase + Prisma schema ─┬─> Web API endpoints ─┬─> Play screen ──> M2
 OULAD baselines+RF (wk1) ──┘                       │
 Skill graph + goal weights ──> Roadmap engine ─────┘
-Judge0 self-hosted + load-tested (by wk6) ────────> pilots + UAT
+ExecutionService mock (wk5) ──> real Judge0 on x86 laptop (by wk6) ──> pilots
+Always-on host decision (wk9, only if UAT needs it) ──────────────> UAT
 Level authoring (continuous, 3/person/week) ──────────────────────> M4
 Events log (from wk3) ──> risk features ──> weekly scoring ──> M3
 Ethics approval question (wk1) ───────────────────> gates all pilots
 ```
 
-**The three things that sink this project if they slip:** (1) the M2 vertical slice, (2) level authoring falling behind, (3) Judge0 capacity — the free tier cannot support even one pilot, so it must be self-hosted by week 6. All three are front-loaded for that reason.
+**The three things that sink this project if they slip:** (1) the M2 vertical slice, (2) level authoring falling behind, (3) real code execution for pilots — the RapidAPI free tier is ~10 attempts/day, so a self-hosted instance must exist before pilot #2. The mock implementation keeps execution off the critical path during development, which is the point of building against an interface.
 
 ## 5. Risk Triggers → Cut List
 
