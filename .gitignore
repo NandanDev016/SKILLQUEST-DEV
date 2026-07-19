@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*serviceAccountKey*.json
+
+# Builds
+dist/
+build/
+.vercel/
+
+# ML artifacts & data (large files stay out of git)
+ml/data/
+*.joblib
+*.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
