@@ -107,20 +107,77 @@ All endpoints internal (called by Web API only), JSON in/out.
 - In: `{skillLevel, hoursPerWeek, quizResults, goalCategory}`. Out: ordered week-by-week plan of skill-node IDs.
 - Method: load the skill DAG (from the `skills` table) → drop nodes tested out via quiz → **topological sort** (Kahn's algorithm) → greedy bin-packing of node `estimatedMinutes` into weekly buckets of `hoursPerWeek × 60`. Deterministic and fully explainable in the viva.
 
-### 6.3 Dropout Scorer — `POST /ai/dropout-score` (+ weekly batch)
-- **Offline**: Random Forest trained on **OULAD** in `ml/` notebooks. Labels: `Withdrawn`/`Fail` = at-risk. Features engineered to a schema *we can also compute from our own events log*:
+### 6.3 Disengagement Risk Scorer — `POST /ai/risk-score` (+ weekly batch)
+
+> **Naming and claim discipline.** This module is an **experimental transfer-based disengagement risk indicator**, not a validated dropout predictor for our population. OULAD is UK adult distance-learning; SkillQuest users are Indian undergraduates doing coding practice. Every report sentence, chart caption and viva answer must carry that qualifier. We may claim: the model discriminates at-risk learners *on OULAD*, and the same feature pipeline runs live on SkillQuest. We may **not** claim it is validated on our users, nor that interventions reduce dropout (see §6.3.6).
+
+#### 6.3.1 Prediction task (state it exactly)
+
+> Given a learner's activity in a **28-day observation window** ending at time *T*, predict whether they will be **disengaged during the 21 days following *T*** (the prediction horizon).
+
+- **Observation window:** 28 days. **Horizon:** 21 days. Both fixed; both stored with every prediction.
+- Nothing after *T* may enter the features. Final course outcome, total clicks, and end-of-course assessment scores are **leakage** and are excluded by construction.
+
+#### 6.3.2 Labels (Withdrawn ≠ Fail)
+
+The previous "`Withdrawn` OR `Fail` = at-risk" definition was wrong: failing a course is an *achievement* outcome, not a *disengagement* outcome, and mixing them teaches the model two different things at once.
+
+| Setting | Positive label | Excluded |
+|---|---|---|
+| **OULAD (training)** | `final_result = Withdrawn` **and** `date_unregistration` falls inside the horizon | `Fail` rows are **not** positives. Train the primary model on Withdrawn-vs-rest |
+| **SkillQuest (live)** | No activity event for ≥ 21 consecutive days | — |
+
+Report the `Fail`-included variant as a **secondary experiment** for comparison, clearly labelled — do not present it as the headline.
+
+#### 6.3.3 Splits (this is what an examiner will probe)
+
+- **Grouped by student** — a student appears in exactly one split. Use `GroupShuffleSplit` / `StratifiedGroupKFold` on `id_student`. Never a plain random row split; a student contributes multiple windows and leakage across splits inflates every metric.
+- **Time/presentation-based holdout** — train on earlier course presentations (e.g. 2013B/2013J), test on a later one (2014J). This mimics deployment: predicting learners you have never seen, in a period you did not train on.
+- Report both protocols. The grouped-random one flatters; the temporal one is honest. Lead with the temporal number.
+
+#### 6.3.4 Baselines (mandatory — the model must beat these)
+
+| Baseline | Why it exists |
+|---|---|
+| Majority class | Floor. Shows accuracy alone is meaningless on imbalanced data |
+| **Days-since-last-activity threshold** | The one that matters. A single rule — "inactive > N days" — is a strong disengagement predictor |
+| Logistic regression on the same features | Shows whether the Random Forest's nonlinearity earns its complexity |
+
+**If Random Forest does not clearly beat the inactivity threshold, that is the finding — report it.** An honest "our RF adds +4 points of PR-AUC over a one-line rule" is a stronger result than an unexplained 91%, and it is defensible under questioning.
+
+#### 6.3.5 Metrics
+
+- **PR-AUC (primary)** — the positive class is rare, so precision/recall trade-off is what matters; ROC-AUC looks optimistic under imbalance.
+- Confusion matrix, precision/recall/F1 per class, ROC-AUC secondary.
+- **Threshold selection is a documented decision, not a default.** Pick the operating point on the validation set for the intervention's cost profile (a false positive = an unnecessary encouraging nudge, which is cheap; a false negative = a student we fail to reach). Report the chosen threshold and why.
+- Report class balance and the trivial-baseline accuracy alongside every number, so no figure can be read out of context.
+- Compare against 2–3 published OULAD papers, noting **their** task definition and split protocol — numbers are only comparable if the task matches.
+
+#### 6.3.6 What may not be claimed
+
+With 20–30 UAT students over a few weeks: report **interaction behaviour** (nudges shown, clicked, dismissed; what students did next). Do **not** claim reduced dropout, causal intervention effectiveness, or local model validation. There is no control group and the sample is far too small. State this as a limitation in the report — examiners respect a stated limitation far more than an overclaim they have to expose.
+
+#### 6.3.7 Features
+
+Engineered so the *same* schema is computable from OULAD and from our events log:
 
 | Feature | OULAD source | SkillQuest source |
 |---|---|---|
-| active_days_last_14 | studentVle clicks | events log |
+| active_days_in_window | studentVle clicks | events log |
 | mean_session_gap_days | studentVle | events log |
-| completion_ratio | assessments submitted/expected | levels completed/scheduled |
-| avg_score | assessment scores | test-case pass ratio |
+| days_since_last_activity | studentVle | events log |
+| completion_ratio | assessments submitted / expected to date | levels completed / scheduled to date |
+| avg_score | assessment scores to date | test-case pass ratio |
+| activity_trend | clicks 2nd half vs 1st half of window | same |
 | streak_current / streak_broken_count | – (derived) | gamification data |
-| days_since_last_login | studentVle | events log |
 
-- Report **precision/recall/F1 per class + ROC-AUC** on a held-out split; compare with 2–3 published OULAD papers.
-- **Online**: a weekly job (Render cron, or a `node-cron` task in the Web API) computes the feature row per student → AI service loads `dropout_rf.joblib` → probability → tiers: **At Risk** (>0.65), **Watch** (0.35–0.65), **Healthy** (<0.35). Tier changes to At Risk trigger the nudge (F5 in PRD).
+Every feature is computed **strictly within the observation window**. The transfer assumption (that these carry equivalent meaning across the two populations) is documented as a limitation, not asserted as fact.
+
+#### 6.3.8 Online scoring & reproducibility
+
+A weekly external-scheduler job (§10.3) computes each student's feature row → AI service loads `risk_rf.joblib` → probability → tiers: **At Risk** (> 0.65), **Watch** (0.35–0.65), **Healthy** (< 0.35).
+
+Every row written to `dropout_scores` must record enough to **reproduce the exact number printed in the report**: `model_version`, `feature_set_version`, `observation_window_start`, `observation_window_end`, `prediction_horizon_days`, `threshold_version`, the `features` snapshot, and `scored_at`. Without these, a figure in the report cannot be traced back to a model and is not defensible.
 
 ### 6.4 Placement Scorer — `POST /ai/placement-score`
 - In: student's completed skill IDs + target companies. Out: per-company `{score 0–100, missingSkills[]}`.

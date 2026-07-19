@@ -27,7 +27,7 @@ SkillQuest addresses all three: it learns the student's goal at onboarding, teac
 |---|---|---|
 | G1 | Teach one complete placement-oriented skill track (Java + DSA) through hands-on coding games | ≥ 40 playable levels live at launch |
 | G2 | Personalize the learning path per student | Roadmap differs based on goal, self-assessed level, and hours/week |
-| G3 | Detect at-risk learners early | Dropout model trained on a public dataset (OULAD), accuracy benchmarked against published papers; live feature logging on our platform |
+| G3 | Detect disengaging learners early | Risk model trained on OULAD, evaluated with PR-AUC against three baselines under student-grouped and temporal splits; same feature pipeline running live on our platform |
 | G4 | Make placement readiness visible at all times | Placement Score (0–100) per company profile, updated after every completed level |
 | G5 | Keep students coming back | XP, streaks, and badges implemented; engagement events logged |
 
@@ -82,12 +82,14 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 - **Badges** — First Quest, Week Warrior (7-day streak), Code Master (complete a skill node with no hints), Placement Ready (score ≥ 75).
 - **Acceptance:** every XP/streak/badge event is written to an events log (this log doubles as the dropout model's live feature source).
 
-### F5 — Dropout Risk Prediction (P0 — the flagship AI module)
-- Model: **Random Forest classifier trained on OULAD** (Open University Learning Analytics Dataset), predicting at-risk/withdrawn students from engagement features (activity frequency, gaps between sessions, assessment scores, completion rate).
-- Benchmark against published OULAD papers in the report; document precision/recall/F1, not just accuracy.
-- On SkillQuest, the same feature schema is computed weekly per student from the events log; the trained model scores each student and flags **At Risk / Watch / Healthy**.
-- Intervention: at-risk students get an in-app nudge (encouragement message + an easier "confidence booster" level suggestion). Email nudges = P1.
-- **Acceptance:** risk tier visible on an internal admin view; nudge fires when tier changes to At Risk.
+### F5 — Disengagement Risk Indicator (P0 — the flagship AI module)
+- Model: **Random Forest trained on OULAD** (Open University Learning Analytics Dataset). Task: given a 28-day observation window, predict disengagement in the following 21 days. Full protocol — labels, splits, baselines, metrics — in TRD §6.3.
+- **Framed as an experimental transfer-based risk indicator, not a locally validated dropout predictor.** OULAD is UK distance-learning; our users are Indian undergraduates. This qualifier appears in the report, on charts, and in the viva.
+- Must beat three baselines (majority class, days-since-last-activity threshold, logistic regression) or the honest comparison is itself the reported finding.
+- On SkillQuest, the same feature schema is computed weekly from the events log; each student is flagged **At Risk / Watch / Healthy**, with model version and window dates stored per prediction for reproducibility.
+- Intervention: at-risk students get an in-app nudge (encouragement + an easier "confidence booster" level). Nudge shown/clicked/dismissed are logged. Email nudges = P1.
+- **Acceptance:** risk tier visible on an internal admin view; nudge fires when tier changes to At Risk; every prediction is reproducible from its stored metadata.
+- **Not claimed:** that the intervention reduces dropout. 20–30 students with no control group cannot support that, and the report says so explicitly.
 
 ### F6 — Placement Readiness Tracker (P0)
 - Company skill profiles (Infosys, TCS, Wipro, Accenture, Cognizant) curated from public job descriptions.
@@ -103,8 +105,8 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 ## 6. Success Metrics (measured in final testing, weeks 12–14)
 
 - 40+ levels playable; full user journey (signup → roadmap → 5 levels → score update) demo-able without errors.
-- Dropout model: report metrics on OULAD test split with methodology (no invented numbers — whatever we get is what we report).
-- User acceptance test with **20–30 real students** from college: engagement rating, System Usability Scale (SUS) questionnaire, would-recommend %.
+- Risk model: PR-AUC, confusion matrix and per-class precision/recall on both the student-grouped and temporal OULAD splits, reported against all three baselines (no invented numbers — whatever we measure is what we report).
+- User acceptance test with **20–30 real students** from college: SUS score, engagement rating, would-recommend %, plus nudge interaction counts. Adequate for preliminary usability findings; **explicitly not** sufficient to demonstrate dropout reduction.
 - API latency: p95 < 500 ms for platform APIs; code execution reported separately (p95 < 15 s, measured).
 
 ## 7. Constraints & Assumptions
@@ -112,7 +114,7 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 - **Budget ≈ ₹0**: free tiers only — Vercel, Render, Supabase (Postgres + Auth), Judge0 free tier (rate-limited; self-host if limits bite).
 - **Team of 3**, ~14 working weeks, alongside regular coursework.
 - Content authoring (problems + test cases) is on the critical path and is scheduled like an engineering task.
-- OULAD is publicly available for academic use; its feature semantics transfer reasonably to our platform (documented as an assumption in the report).
+- OULAD is publicly available for academic use. **Its transfer to our population is an assumption, not a finding** — UK adult distance-learning vs Indian undergraduate coding practice. Documented as a limitation in the report, never asserted as validation.
 
 ## 8. Risks & Mitigations
 
