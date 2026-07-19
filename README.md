@@ -22,8 +22,8 @@ All planning documents live in [docs/](docs/) — read them in order:
 2. [Technical Requirements (TRD)](docs/02-TRD.md) — architecture, stack, integration contracts
 3. [App Flow](docs/03-APP-FLOW.md) — screens, journeys, edge cases
 4. [UI/UX Design](docs/04-UIUX-DESIGN.md) — design system, screen layouts
-5. Backend Schema *(coming next)*
-6. Implementation Plan
+5. [Backend Schema](docs/05-BACKEND-SCHEMA.md) — Postgres tables, relationships, indexes
+6. Implementation Plan *(coming next)*
 
 ## 🏗️ Repository Layout
 
