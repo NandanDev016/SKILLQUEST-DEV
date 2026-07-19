@@ -20,8 +20,8 @@ All planning documents live in [docs/](docs/) — read them in order:
 
 1. [Product Requirements (PRD)](docs/01-PRD.md) — what we're building and what we're **not** building
 2. [Technical Requirements (TRD)](docs/02-TRD.md) — architecture, stack, integration contracts
-3. App Flow *(coming next)*
-4. UI/UX Design
+3. [App Flow](docs/03-APP-FLOW.md) — screens, journeys, edge cases
+4. UI/UX Design *(coming next)*
 5. Backend Schema
 6. Implementation Plan
 
