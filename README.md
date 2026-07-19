@@ -11,8 +11,8 @@ SkillQuest teaches Java + DSA through hands-on coding games instead of videos. I
 | Name | USN | Role |
 |---|---|---|
 | Nandan S | 1SP23AD016 | System architecture, Python AI microservice, dropout prediction, backend |
-| Anjith K.J | 1SP23AD032 | React frontend, game engine UI, Monaco editor, Firebase auth |
-| Bhanushree C.V | 1SP23AD005 | NLP onboarding, placement tracker, MongoDB design, testing, documentation |
+| Anjith K.J | 1SP23AD032 | React frontend, game engine UI, Monaco editor, Supabase auth |
+| Bhanushree C.V | 1SP23AD005 | NLP onboarding, placement tracker, PostgreSQL schema design, testing, documentation |
 
 ## 📚 Project Documents
 

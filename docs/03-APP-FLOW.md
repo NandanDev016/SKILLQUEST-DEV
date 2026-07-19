@@ -13,7 +13,7 @@
 | # | Route | Screen | Auth | Priority |
 |---|---|---|---|---|
 | S1 | `/` | Landing page | Public | P0 |
-| S2 | `/auth` | Sign up / Login (Firebase) | Public | P0 |
+| S2 | `/auth` | Sign up / Login (Supabase Auth) | Public | P0 |
 | S3 | `/onboarding` | Onboarding wizard (5 steps) | Auth, first-time only | P0 |
 | S4 | `/dashboard` | Home — streak, XP, next quest, risk nudges | Auth | P0 |
 | S5 | `/roadmap` | Interactive skill-tree roadmap | Auth | P0 |
@@ -114,7 +114,7 @@ flowchart TD
 | AI service down at onboarding | Default roadmap fallback (silent, logged) |
 | Leaderboard with <5 users | Hide ranks, show "Early adopter" framing |
 | Brand-new user on dashboard | Zero-state: single big "Start your first quest" CTA, no empty widgets |
-| Token expired mid-session | Firebase SDK auto-refreshes; on hard 401 → redirect `/auth` preserving return URL |
+| Token expired mid-session | supabase-js auto-refreshes; on hard 401 → redirect `/auth` preserving return URL |
 
 ## 9. Navigation Rules
 

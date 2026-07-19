@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.0 |
+| **Version** | 1.1 — switched MongoDB Atlas + Firebase Auth → Supabase (Postgres + Auth) |
 | **Depends on** | [01-PRD.md](01-PRD.md) — feature scope is defined there; this doc defines *how* it's built |
 | **Audience** | The dev team. Every technology decision and integration contract lives here. |
 
@@ -13,15 +13,15 @@
 ```mermaid
 flowchart TD
     U[Student's Browser] --> FE[React + Tailwind SPA\nVercel]
-    FE -- "Firebase ID token on every request" --> API[Node.js + Express Web API\nRender]
-    API --> DB[(MongoDB Atlas M0)]
+    FE -- "Supabase JWT on every request" --> API[Node.js + Express Web API\nRender]
+    API --> DB[(Supabase Postgres)]
     API -- "internal REST + shared secret" --> AI[Python FastAPI AI Service\nRender]
     AI --> DB
     API -- "code submissions" --> J0[Judge0 CE\ncode execution sandbox]
-    FE -. "sign-in only" .-> FB[Firebase Auth]
+    FE -. "sign-in only" .-> SB[Supabase Auth]
 ```
 
-**Rule: the browser talks only to the Web API** (plus Firebase for sign-in). The AI service and Judge0 are never called directly from the frontend — the Web API is the single gateway. This keeps auth, rate limiting, and logging in one place.
+**Rule: the browser talks only to the Web API** (plus Supabase Auth for sign-in). The AI service and Judge0 are never called directly from the frontend — the Web API is the single gateway. This keeps auth, rate limiting, and logging in one place.
 
 ### Service responsibilities
 
@@ -40,8 +40,9 @@ flowchart TD
 | State/data | React Query + Context | No Redux — overkill at this size |
 | Web API | Node 20 LTS + Express 4 | |
 | AI Service | Python 3.11 + FastAPI + Uvicorn | |
-| DB | MongoDB Atlas M0 (free, 512 MB) | Single cluster, two logical groupings of collections (platform + ai) |
-| Auth | Firebase Authentication (Spark) | Email/password + Google. Web API verifies ID tokens with `firebase-admin` |
+| DB | Supabase free tier — Postgres (500 MB) | Relational schema; SQL aggregations power dropout features and the leaderboard; pgvector available for embeddings |
+| Auth | Supabase Auth | Email/password + Google. Web API verifies the Supabase JWT — no Firebase anywhere |
+| DB access | Prisma (Web API) · psycopg + pandas (AI service) | Always via Supabase's pooled connection string (Supavisor, port 6543) — the free tier allows very few direct connections |
 | Code execution | Judge0 CE | Via RapidAPI free tier first; self-hosted on a VM/Render as fallback (see §5) |
 | Embeddings | `all-MiniLM-L6-v2` via **fastembed** (ONNX) | NOT full PyTorch `sentence-transformers` — Render free tier has 512 MB RAM; torch alone exceeds it. fastembed runs the same model in ~150 MB |
 | ML | scikit-learn (Random Forest), pandas | Trained offline in notebooks; model shipped as a `joblib` artifact inside the AI service image |
@@ -59,15 +60,16 @@ SKILLQUEST-DEV/
 └── content/         # Level definitions: problems, starter code, test cases (JSON)
 ```
 
-`content/` is deliberately outside `backend/`: levels are authored as JSON files, reviewed in PRs like code, and loaded into MongoDB by a seed script. This gives version control + review over the 40–50 levels.
+`content/` is deliberately outside `backend/`: levels are authored as JSON files, reviewed in PRs like code, and loaded into the database by a seed script. This gives version control + review over the 40–50 levels.
 
 ## 4. Authentication Flow
 
-1. Frontend signs in via Firebase SDK → receives an **ID token** (JWT, ~1 h expiry, SDK auto-refreshes).
-2. Every Web API request carries `Authorization: Bearer <idToken>`.
-3. Express middleware verifies the token with `firebase-admin`, attaches `uid`, and looks up/creates the user document (`users.firebaseUid`).
-4. Web API → AI service calls carry `X-Internal-Key: <shared secret>` (env var on both services). The AI service rejects requests without it.
-5. Admin routes (risk dashboard, level seeding) gated by an `isAdmin` flag on the user document — set manually in Atlas for the 3 team members.
+1. Frontend signs in via `supabase-js` (email/password or Google) → receives a Supabase **access token** (JWT, ~1 h expiry, SDK auto-refreshes). Google sign-in needs a one-time Google Cloud OAuth client configured in the Supabase dashboard.
+2. Every Web API request carries `Authorization: Bearer <accessToken>`.
+3. Express middleware verifies the JWT with the project's `SUPABASE_JWT_SECRET` (HS256), reads the `sub` claim (the `auth.users` UUID), and looks up/creates the matching row in our `profiles` table (`profiles.id` = that UUID).
+4. **The browser uses Supabase for auth only.** The anon key grants no table access (RLS enabled with no public policies) — all data flows through the Web API, which connects to Postgres with server-side credentials.
+5. Web API → AI service calls carry `X-Internal-Key: <shared secret>` (env var on both services). The AI service rejects requests without it.
+6. Admin routes (risk dashboard, level seeding) gated by an `is_admin` flag on the profile row — set manually in the Supabase dashboard for the 3 team members.
 
 ## 5. Judge0 Integration (code execution)
 
@@ -89,7 +91,7 @@ All endpoints internal (called by Web API only), JSON in/out.
 
 ### 6.2 Roadmap Generator — `POST /ai/roadmap`
 - In: `{skillLevel, hoursPerWeek, quizResults, goalCategory}`. Out: ordered week-by-week plan of skill-node IDs.
-- Method: load the skill DAG (from `skills` collection) → drop nodes tested out via quiz → **topological sort** (Kahn's algorithm) → greedy bin-packing of node `estimatedMinutes` into weekly buckets of `hoursPerWeek × 60`. Deterministic and fully explainable in the viva.
+- Method: load the skill DAG (from the `skills` table) → drop nodes tested out via quiz → **topological sort** (Kahn's algorithm) → greedy bin-packing of node `estimatedMinutes` into weekly buckets of `hoursPerWeek × 60`. Deterministic and fully explainable in the viva.
 
 ### 6.3 Dropout Scorer — `POST /ai/dropout-score` (+ weekly batch)
 - **Offline**: Random Forest trained on **OULAD** in `ml/` notebooks. Labels: `Withdrawn`/`Fail` = at-risk. Features engineered to a schema *we can also compute from our own events log*:
@@ -108,25 +110,27 @@ All endpoints internal (called by Web API only), JSON in/out.
 
 ### 6.4 Placement Scorer — `POST /ai/placement-score`
 - In: student's completed skill IDs + target companies. Out: per-company `{score 0–100, missingSkills[]}`.
-- Method: each company profile is a curated list of weighted skills (from public JDs, stored in `companyProfiles`). Score = weighted coverage of the profile by completed skills, with embedding similarity used to match skill names to JD phrasing (so "recursion" matches "recursive problem solving"). Gap list = highest-weight uncovered skills.
+- Method: each company profile is a curated list of weighted skills (from public JDs, stored in the `company_profiles` table; JD-phrase embeddings cached in a pgvector column so they're computed once, not per request). Score = weighted coverage of the profile by completed skills, with embedding similarity used to match skill names to JD phrasing (so "recursion" matches "recursive problem solving"). Gap list = highest-weight uncovered skills.
 
 ## 7. Events Log (the backbone)
 
-Every meaningful action writes one document to `events`: `{userId, type, payload, ts}`. Types: `login`, `level_start`, `level_submit`, `level_complete`, `hint_used`, `streak_break`, `badge_earned`, `roadmap_view`. Append-only, indexed on `(userId, ts)`. This single collection feeds dropout features, streak calculation, and the admin dashboard — it must be written from day one, even before the dropout model exists.
+Every meaningful action writes one row to the `events` table: `(user_id, type, payload jsonb, ts)`. Types: `login`, `level_start`, `level_submit`, `level_complete`, `hint_used`, `streak_break`, `badge_earned`, `roadmap_view`. Append-only, indexed on `(user_id, ts)`. Weekly dropout features become a single SQL `GROUP BY` over this table. This single table feeds dropout features, streak calculation, and the admin dashboard — it must be written from day one, even before the dropout model exists.
 
 ## 8. Non-Functional Requirements
 
 - **Performance**: p95 < 500 ms for Web API endpoints (excluding Judge0 passthrough). Pagination on leaderboard/levels lists.
-- **Security**: all secrets in env vars (never committed — `.env` in `.gitignore`); CORS locked to the Vercel domain; `express-rate-limit` on submission endpoints (10/min/user); input validation with `zod` (Node) and Pydantic (FastAPI); Firebase token verification on every non-public route.
-- **Storage budget**: Atlas M0 = 512 MB. Events log is the growth risk — at UAT scale (~30 users × ~200 events) it's trivial; no TTL needed this semester, but document the concern in the report.
-- **Availability**: free tiers only; cold starts accepted in dev. For demos/UAT: a warm-up ping (GitHub Actions cron hitting `/health` every 10 min on both Render services during demo weeks).
+- **Security**: all secrets in env vars (never committed — `.env` in `.gitignore`); CORS locked to the Vercel domain; `express-rate-limit` on submission endpoints (10/min/user); input validation with `zod` (Node) and Pydantic (FastAPI); Supabase JWT verification on every non-public route.
+- **Storage budget**: Supabase free tier = 500 MB Postgres. Events log is the growth risk — at UAT scale (~30 users × ~200 events) it's trivial; no pruning needed this semester, but document the concern in the report.
+- **Availability**: free tiers only; cold starts accepted in dev. **Supabase free projects pause after 7 days of inactivity** — the Web API `/health` endpoint runs a trivial DB query, and a GitHub Actions cron pings `/health` on both Render services (every 10 min during demo/UAT weeks, daily otherwise), which keeps Render warm *and* Supabase unpaused with one mechanism.
 
 ## 9. Environments & Deployment
 
 | Env | Frontend | Web API | AI Service | DB |
 |---|---|---|---|---|
-| Local dev | Vite :5173 | :4000 | :8000 | Atlas shared `dev` database |
-| Production | Vercel | Render | Render | Atlas `prod` database |
+| Local dev | Vite :5173 | :4000 | :8000 | Supabase project `skillquest-dev` |
+| Production | Vercel | Render | Render | Supabase project `skillquest-prod` |
+
+The free tier allows two projects per organization — exactly one for dev, one for prod. Schema changes go through Prisma migrations committed to the repo, applied to dev first, prod on release.
 
 - Deploy = push to `main` (Vercel + Render auto-deploy).
 - **Branch workflow**: `main` is protected by convention — work on feature branches (`feat/<name>`), open PRs, at least one teammate reviews. CI (GitHub Actions): lint + `npm test` + `pytest` on every PR (kept minimal — smoke tests, not full coverage).

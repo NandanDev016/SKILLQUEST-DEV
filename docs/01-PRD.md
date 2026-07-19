@@ -58,7 +58,7 @@ These are deliberately excluded to keep the project deliverable in one semester.
 Priority key: **P0** = must ship (project fails without it) · **P1** = should ship · **P2** = stretch.
 
 ### F1 — Onboarding & Goal Capture (P0)
-- Firebase email/Google sign-in.
+- Supabase Auth email/Google sign-in.
 - Onboarding wizard: branch, year, self-assessed skill level (beginner/intermediate/advanced via a 5-question mini-quiz), hours available per week, target companies (multi-select), and **one free-text field**: "Describe your career goal in your own words."
 - The free-text goal is sent to the AI service, which maps it to a goal category using sentence embeddings (NLP module #1).
 - **Acceptance:** two students with different quiz results and hours/week receive visibly different roadmaps.
@@ -109,7 +109,7 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 
 ## 7. Constraints & Assumptions
 
-- **Budget ≈ ₹0**: free tiers only — Vercel, Render, MongoDB Atlas M0, Firebase Spark, Judge0 free tier (rate-limited; self-host on Render if limits bite).
+- **Budget ≈ ₹0**: free tiers only — Vercel, Render, Supabase (Postgres + Auth), Judge0 free tier (rate-limited; self-host if limits bite).
 - **Team of 3**, ~14 working weeks, alongside regular coursework.
 - Content authoring (problems + test cases) is on the critical path and is scheduled like an engineering task.
 - OULAD is publicly available for academic use; its feature semantics transfer reasonably to our platform (documented as an assumption in the report).
