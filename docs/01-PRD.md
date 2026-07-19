@@ -19,7 +19,7 @@ Engineering students in tier 2–3 Indian colleges face three compounding proble
 2. **Passive learning → dropout** — self-paced video courses have very high abandonment rates; watching is not doing.
 3. **No placement visibility** — students discover their skill gaps only during placement season, when it is too late to fix them.
 
-SkillQuest addresses all three: it learns the student's goal at onboarding, teaches through interactive coding challenges instead of videos, predicts disengagement before the student quits, and continuously shows a placement-readiness score against real Indian IT service companies.
+SkillQuest addresses all three: it learns the student's goal at onboarding, teaches through interactive coding challenges instead of videos, flags disengagement early so it can intervene, and continuously shows how much of a company's published role requirements the student currently covers.
 
 ## 2. Goals
 
@@ -28,7 +28,7 @@ SkillQuest addresses all three: it learns the student's goal at onboarding, teac
 | G1 | Teach one complete placement-oriented skill track (Java + DSA) through hands-on coding games | ≥ 40 playable levels live at launch |
 | G2 | Personalize the learning path per student | Roadmap differs based on goal, self-assessed level, and hours/week |
 | G3 | Detect disengaging learners early | Risk model trained on OULAD, evaluated with PR-AUC against three baselines under student-grouped and temporal splits; same feature pipeline running live on our platform |
-| G4 | Make placement readiness visible at all times | Placement Score (0–100) per company profile, updated after every completed level |
+| G4 | Make role skill coverage visible at all times | Tracked-skill coverage (0–100%) per company role profile, updated after every completed level; gaps classified available-now vs external |
 | G5 | Keep students coming back | XP, streaks, and badges implemented; engagement events logged |
 
 ## 3. Non-Goals (Out of Scope — Do Not Build This Semester)
@@ -92,9 +92,14 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 - **Not claimed:** that the intervention reduces dropout. 20–30 students with no control group cannot support that, and the report says so explicitly.
 
 ### F6 — Placement Readiness Tracker (P0)
-- Company skill profiles (Infosys, TCS, Wipro, Accenture, Cognizant) curated from public job descriptions.
-- Score = similarity between the student's completed-skill vector and the company profile, computed with **sentence-embedding similarity** (NLP module #2), shown as 0–100 with a per-skill gap list ("You're missing: recursion, SQL basics").
-- **Acceptance:** completing a level visibly moves the score; gap list updates.
+- Company role profiles (Infosys, TCS, Wipro, Accenture, Cognizant) curated from **public job descriptions, each recorded with source URL, role title, location, collection date and profile version** — so every number in the report is traceable to a citable source and a date.
+- Score = **weighted coverage** of a role's required skills by the student's completed skills (deterministic arithmetic; embeddings assist the JD-phrase → skill mapping at ingestion, not at scoring time — TRD §6.4).
+- **Displayed as:** `Placement Readiness — 62% tracked-skill coverage`, with the standing subtitle *"Based on published requirements currently represented in SkillQuest. Not a hiring prediction."* The phrasing "You're 62% ready for Infosys" is **banned** from UI, report and viva — it implies a hiring probability we cannot support.
+- **Gaps are shown in full, and classified:**
+  - `Available now` — SkillQuest teaches it; renders a **"Train this →"** action deep-linking to the roadmap node.
+  - `External / future track` — a genuine role requirement (e.g. SQL, OS fundamentals) that SkillQuest does not teach yet; shown as **information only, with no action button**.
+- Showing external gaps is deliberate: knowing a requirement exists is useful even when we can't close it. A button that leads nowhere is not. The scoring model is track-agnostic — additional tracks are future work, which is also the honest answer to "why only Java?" in the viva.
+- **Acceptance:** completing a level visibly moves the score; the gap list updates; no `external_track` gap ever renders a "Train this" button.
 
 ### F7 — Leaderboard (P1)
 - Weekly XP leaderboard among users. Ship only after F1–F6 are stable.

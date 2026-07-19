@@ -94,9 +94,10 @@ Full-screen, one question per step, progress bar at top (Step 2 of 5). Big frien
 │  Top: ⚡ 1,240 XP    🔥 6-day streak   [avatar]│
 ├─────────────────────────────────────────────┤
 │  ┌─────────────────────┐  ┌────────────────┐ │
-│  │ CONTINUE YOUR QUEST │  │ Placement Score│ │
-│  │ Level: Recursion #3 │  │   ◐ 62 / 100   │ │
-│  │ [ Resume → ]        │  │  ▲ +4 this wk  │ │
+│  │ CONTINUE YOUR QUEST │  │ Placement      │ │
+│  │ Level: Recursion #3 │  │ Readiness      │ │
+│  │ [ Resume → ]        │  │  ◐ 62% covered │ │
+│  │                     │  │  ▲ +4 this wk  │ │
 │  └─────────────────────┘  └────────────────┘ │
 │  ┌─────────────────────┐  ┌────────────────┐ │
 │  │ This week's progress│  │ Recent badges  │ │
@@ -117,7 +118,13 @@ Vertical skill-tree (top = start, down = advanced), branches where prerequisites
 Results drawer uses `TestResultRow`; failed *visible* tests expand to input/expected/actual; hidden tests show pass/fail only (never leak hidden cases). Compile errors render in the drawer in mono, `danger`-tinted. "Stuck? Get a hint (−10 XP)" is `info`-styled and clearly optional.
 
 ### 7.7 Placement Tracker (S7)
-Per-company cards, each a `ProgressRing` + score + trend. Tap → gap list: missing skills ranked by weight, each with "Train this →" deep-linking to `/roadmap?focus=<skillId>`. Honest framing: "You're 62% ready for Infosys" not a fake guarantee.
+Per-role cards, each a `ProgressRing` + coverage % + trend, headed **"Placement Readiness — 62% tracked-skill coverage"** with the permanent subtitle *"Based on published requirements currently represented in SkillQuest. Not a hiring prediction."* and a link to the JD source + collection date.
+
+Tap → full gap list in two visually distinct groups:
+- **Available now** — normal styling, "Train this →" deep-links to `/roadmap?focus=<skillId>`.
+- **External / future track** — muted styling, an "on our roadmap" tag, **no button**.
+
+**Copy rule:** never write "You're 62% ready for Infosys" anywhere in the product, report or presentation. It implies a hiring probability the model does not measure.
 
 ### 7.8 Profile (S8)
 Avatar, stats (total XP, levels, best streak), full badge shelf (earned bright, locked greyed with unlock hints), and **settings**: hours/week (re-triggers roadmap re-pack with a confirm dialog per App Flow §8), target companies. No full re-onboarding in v1.

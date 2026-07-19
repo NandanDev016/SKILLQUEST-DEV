@@ -38,9 +38,10 @@ erDiagram
     badges ||--o{ user_badges : "awarded as"
     profiles ||--o{ dropout_scores : scored
     profiles ||--o{ placement_scores : scored
-    companies ||--o{ company_skills : requires
+    companies ||--o{ company_role_profiles : publishes
+    company_role_profiles ||--o{ company_skills : requires
     skills ||--o{ company_skills : "mapped to"
-    companies ||--o{ placement_scores : "measured against"
+    company_role_profiles ||--o{ placement_scores : "measured against"
 ```
 
 ## 3. Tables
@@ -220,16 +221,31 @@ create table companies (
   logo        text
 );
 
+-- One row per role profile per company, versioned and citable.
+create table company_role_profiles (
+  id            bigint generated always as identity primary key,
+  company_id    text not null references companies(id) on delete cascade,
+  role_title    text not null,                  -- 'Systems Engineer', 'Programmer Analyst'
+  location      text,                           -- 'India', 'Bangalore'
+  source_url    text not null,                  -- the public JD we curated from
+  collected_on  date not null,                  -- when we read it (JDs change)
+  profile_version int not null default 1,
+  is_active     boolean not null default true,
+  unique (company_id, role_title, profile_version)
+);
+
 create table company_skills (
-  company_id  text not null references companies(id) on delete cascade,
+  profile_id  bigint not null references company_role_profiles(id) on delete cascade,
   skill_id    text not null references skills(id) on delete cascade,
-  weight      numeric not null default 1,        -- importance in that company's profile
-  jd_phrase   text,                             -- original JD wording
-  jd_embedding vector(384),                      -- pgvector, cached MiniLM embedding
-  primary key (company_id, skill_id)
+  weight      numeric not null default 1 check (weight > 0),
+  jd_phrase   text,                             -- original JD wording, for the report
+  is_tracked  boolean not null default true,    -- false = requirement SkillQuest does not teach yet
+  primary key (profile_id, skill_id)
 );
 ```
-`vector(384)` needs `create extension vector;` (pgvector, available on Supabase). Embeddings computed once at seed time, not per request (TRD §6.4).
+**Provenance is required, not optional:** every score in the report traces to a `source_url` + `collected_on` + `profile_version`, so an examiner asking "where did these requirements come from?" gets a citation. Re-curating a JD creates a new `profile_version` rather than editing rows, keeping past scores reproducible.
+
+**No embedding column.** JD-phrase → `skill_id` mapping is done once during ingestion (embedding similarity suggests, a human confirms), so the runtime score is deterministic weighted-coverage arithmetic (TRD §6.4). `is_tracked = false` marks genuine role requirements outside our Java+DSA track — these appear in the gap list as informational rows with no "Train this" action.
 
 ### 3.12 `dropout_scores` & `placement_scores` — AI outputs (history)
 ```sql
@@ -245,9 +261,10 @@ create table dropout_scores (
 create table placement_scores (
   id            bigint generated always as identity primary key,
   user_id       uuid not null references profiles(id) on delete cascade,
-  company_id    text not null references companies(id) on delete cascade,
-  score         int not null,                    -- 0..100
-  missing_skills text[] default '{}',
+  profile_id    bigint not null references company_role_profiles(id) on delete cascade,
+  score         int not null check (score between 0 and 100),
+  missing_tracked_skills  text[] default '{}',   -- gaps we teach -> "Train this"
+  missing_external_skills text[] default '{}',   -- gaps we don't teach -> informational
   computed_at   timestamptz not null default now()
 );
 ```
@@ -261,10 +278,10 @@ Kept as **history** (not overwritten) so the report can chart "risk over time" a
 | `submissions` | `(user_id, created_at)` | Progress history, rate-limit checks |
 | `submissions` | `(level_id)` | Per-level analytics |
 | `user_levels` | `(user_id, status)` | Dashboard "in progress" queries |
-| `placement_scores` | `(user_id, computed_at desc)` | Latest score per company |
+| `placement_scores` | `(user_id, profile_id, computed_at desc)` | Latest coverage per role profile |
 | `dropout_scores` | `(user_id, scored_at desc)` | Latest tier + trend |
 | `roadmap_items` | `(roadmap_id, week_number, position)` | Ordered roadmap render |
-| `company_skills` | `jd_embedding` (ivfflat/hnsw) | Only if we do vector search; small data → optional |
+| `company_role_profiles` | `(company_id, is_active)` | Active profile lookup during scoring |
 
 ## 5. Row Level Security
 

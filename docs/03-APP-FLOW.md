@@ -81,9 +81,12 @@ flowchart TD
 
 ## 4. Flow C — Placement Tracker
 
-1. From dashboard card ("Placement Score: 62 ▲") or nav → S7.
-2. S7 shows: per-company score cards (Infosys 71, TCS 68, …) → tap a company → gap list: missing skills ranked by weight, each with a **"Train this →"** button deep-linking to that skill's node in the roadmap (`/roadmap?focus=<skillId>`).
-3. Score recomputes after every `level_complete` (Web API fires `POST /ai/placement-score` async; dashboard card shows the delta since last week).
+1. From dashboard card ("Placement Readiness: 62% coverage ▲") or nav → S7.
+2. S7 shows per-role coverage cards (Infosys 71%, TCS 68%, …), each with the standing subtitle *"Based on published requirements currently represented in SkillQuest. Not a hiring prediction."* and the JD source link + collection date.
+3. Tap a role → **full** gap list, ranked by weight, in two groups:
+   - **Available now** — "Train this →" deep-links to `/roadmap?focus=<skillId>`.
+   - **External / future track** — informational row, muted styling, **no action button** (SkillQuest doesn't teach it yet). Never render a button that leads nowhere.
+4. Coverage recomputes after every `level_complete` (Web API calls the AI service server-side; dashboard card shows the delta since last week).
 
 ## 5. Flow D — Dropout Intervention (invisible until triggered)
 
