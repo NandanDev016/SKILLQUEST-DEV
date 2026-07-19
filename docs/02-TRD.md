@@ -104,8 +104,31 @@ All endpoints internal (called by Web API only), JSON in/out.
 - Method: embed the text with fastembed → cosine similarity against pre-computed embeddings of ~10 goal-category description paragraphs (service-based placement, product companies, higher studies, etc.) → argmax with a confidence floor (below 0.35 → `general_placement` default).
 
 ### 6.2 Roadmap Generator — `POST /ai/roadmap`
-- In: `{skillLevel, hoursPerWeek, quizResults, goalCategory}`. Out: ordered week-by-week plan of skill-node IDs.
-- Method: load the skill DAG (from the `skills` table) → drop nodes tested out via quiz → **topological sort** (Kahn's algorithm) → greedy bin-packing of node `estimatedMinutes` into weekly buckets of `hoursPerWeek × 60`. Deterministic and fully explainable in the viva.
+- In: `{skillLevel, hoursPerWeek, quizResults, goalCategory, targetCompanies}`. Out: ordered week-by-week plan of skill-node IDs.
+- Method:
+  1. Load the skill DAG from `skills` + `skill_prerequisites`.
+  2. Drop nodes the student tested out of (3/3 on that topic — App Flow §2).
+  3. **Apply goal weights** (below) to every remaining node.
+  4. **Weighted topological sort** — Kahn's algorithm where, whenever several nodes are simultaneously unblocked, the highest-weighted one is emitted first. Prerequisites are still absolutely respected; the goal only orders *choices among currently-available* nodes.
+  5. **Drop optional nodes** whose goal weight is 0 (they become "extra credit", visible but unscheduled).
+  6. Greedy bin-pack `estimated_minutes` into weekly buckets of `hours_per_week × 60`.
+
+#### Goal weights — how the goal actually changes the plan
+
+The previous version accepted `goalCategory` and then ignored it, so "personalized by your goal" was not a true statement. Each goal category now carries a weight vector over skill tags, stored in a `goal_profiles` seed table:
+
+| Goal category | Up-weighted | Down-weighted / optional |
+|---|---|---|
+| `service_placement` (Infosys/TCS/Wipro…) | aptitude-style basics, arrays, strings, OOP, SQL-adjacent basics | advanced trees, graphs, DP |
+| `product_placement` (product companies) | recursion, complexity, sorting/searching, trees, graphs, DP | verbose OOP ceremony |
+| `higher_studies` | complexity analysis, data-structure theory, recursion | interview-pattern drills |
+| `general_placement` (default / low confidence) | balanced — the neutral vector | — |
+
+Additionally, if the student selected target companies, skills appearing in those companies' active role profiles get a further boost — so a student targeting TCS sees TCS-relevant nodes earlier.
+
+**Acceptance test for this feature:** two students with identical quiz results and identical hours/week, differing *only* in goal category, must receive **measurably different node orderings**. If they don't, the personalization claim is false and must be removed from the PRD. Include this comparison in the report as evidence.
+
+Still fully deterministic and explainable in the viva: "the goal changes the priority weights; prerequisites are never violated."
 
 ### 6.3 Disengagement Risk Scorer — `POST /ai/risk-score` (+ weekly batch)
 

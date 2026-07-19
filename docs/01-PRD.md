@@ -59,15 +59,18 @@ Priority key: **P0** = must ship (project fails without it) · **P1** = should s
 
 ### F1 — Onboarding & Goal Capture (P0)
 - Supabase Auth email/Google sign-in.
-- Onboarding wizard: branch, year, self-assessed skill level (beginner/intermediate/advanced via a 5-question mini-quiz), hours available per week, target companies (multi-select), and **one free-text field**: "Describe your career goal in your own words."
-- The free-text goal is sent to the AI service, which maps it to a goal category using sentence embeddings (NLP module #1).
+- Research consent screen (Backend Schema §5.1) before any data collection.
+- Onboarding wizard: branch, year, placement quiz (**12 questions — 3 per topic**; a topic is skipped only on 3/3, since one question is far too weak to skip a fundamental), hours available per week, target companies (multi-select), and **one free-text field**: "Describe your career goal in your own words."
+- The free-text goal is mapped to a goal category using sentence embeddings (NLP module #1), which then drives the roadmap's skill weights (F2).
+- Every quiz answer is persisted with its question version, so test-out decisions are reproducible and the quiz can be evaluated in the report.
 - **Acceptance:** two students with different quiz results and hours/week receive visibly different roadmaps.
 
 ### F2 — Personalized Roadmap (P0)
 - Skills are stored as a **prerequisite DAG** (directed acyclic graph): e.g., `variables → loops → functions → recursion → …`.
-- The roadmap engine topologically sorts the graph, skips nodes the student tested out of, and packs levels into weeks based on hours/week.
+- The roadmap engine applies **goal-specific skill weights**, then does a weighted topological sort (prerequisites always respected; the goal only orders choices among currently-unblocked nodes), drops zero-weight optional nodes, and packs the rest into weeks by hours/week. Full algorithm in TRD §6.2.
+- The goal must **demonstrably** change the plan — otherwise the personalization claim is dropped from this document.
 - Rendered as an interactive node tree on the dashboard: completed / current / locked states.
-- **Acceptance:** roadmap regenerates correctly when the student changes hours/week in settings.
+- **Acceptance:** (a) roadmap regenerates correctly when hours/week changes; (b) two students with identical quiz results and hours, differing only in goal category, receive measurably different node orderings — evidenced in the report.
 
 ### F3 — Code-to-Solve Game Engine (P0)
 - Monaco editor in the browser; each level = problem statement + starter code + hidden test cases.

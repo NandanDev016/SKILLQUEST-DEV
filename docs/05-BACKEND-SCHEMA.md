@@ -54,7 +54,7 @@ create table profiles (
   full_name     text,
   college       text,
   branch        text,
-  year          int,
+  year          int check (year between 1 and 4),
   skill_level   text default 'beginner'
     check (skill_level in ('beginner','intermediate','advanced')),
   hours_per_week int default 5 check (hours_per_week between 1 and 40),
@@ -93,10 +93,20 @@ create table skills (
   id               text primary key,            -- 'recursion', 'loops' (human-readable, stable)
   title            text not null,
   description      text,
-  concept_type     text not null,               -- 'conceptual' | 'practical' (informs level style)
-  estimated_minutes int not null default 60,     -- for roadmap bin-packing
+  concept_type     text not null
+    check (concept_type in ('conceptual','practical')),
+  tags             text[] not null default '{}', -- 'oop','arrays','graphs' — goal weighting keys
+  estimated_minutes int not null default 60 check (estimated_minutes > 0),
   display_order    int not null default 0,
   created_at       timestamptz not null default now()
+);
+
+-- Goal categories carry weight vectors that actually reorder the roadmap (TRD 6.2)
+create table goal_profiles (
+  goal_category text not null,                  -- 'service_placement','product_placement',...
+  skill_tag     text not null,                  -- matches skills.tags
+  weight        numeric not null default 1,     -- 0 = optional/unscheduled, >1 = prioritized
+  primary key (goal_category, skill_tag)
 );
 ```
 
